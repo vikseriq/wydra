@@ -1,0 +1,99 @@
+<?php
+/**
+ * Plugin Name: Wydra: WordPress YAML Data Render Assistant
+ * Description: Use YAML-driven data right in post content and render by using HTML templates
+ * Plugin URI: https://github.com/vikseriq/wydra
+ * GitHub Plugin URI: https://github.com/vikseriq/wydra
+ * Author: vikseriq
+ * Author URI: https://vikseriq.xyz/
+ * Version: 0.1.0
+ * License: MIT
+ * License URI: https://tldrlegal.com/license/mit-license
+ */
+
+define('Wydra\PLUGIN_FILE', dirname(__FILE__) . '/');
+define('Wydra\SHORTCODE_PREFIX', 'wydra');
+define('Wydra\THEME_PATH', '/wydra-templates/');
+define('Wydra\VIEW_PATH', \Wydra\PLUGIN_FILE . '/templates/');
+
+add_action('after_setup_theme', 'wydra_boot_plugin');
+function wydra_boot_plugin()
+{
+    include_once Wydra\PLUGIN_FILE . 'wydra.class.php';
+    Wydra::init();
+}
+
+/**
+ * Returns shortcode attribute value with fallback
+ * @param $code string attribute code
+ * @param null $default fallback value
+ * @return mixed|null
+ */
+function wydra_attr($code, $default = null)
+{
+    return Wydra::latest()->attr($code, $default);
+}
+
+/**
+ * Returns shortcode content
+ * @return string
+ */
+function wydra_content()
+{
+    return Wydra::latest()->content();
+}
+
+/**
+ * Returns content from named YAML container, registered with wydra-define
+ * @param $name
+ * @return null
+ */
+function wydra_data($name)
+{
+    return Wydra::get_data($name);
+}
+
+/**
+ * Return PHP array of YAML content
+ * @return array
+ */
+function wydra_yaml()
+{
+    return Wydra::parse_yaml(Wydra::latest()->content());
+}
+
+/**
+ * Resolves value based on array path or returns default.
+ *
+ * Example:
+ *
+ * $array = [
+ *      'foo' => [
+ *          'bar' => 'baz',
+ *          'kee'
+ *      ],
+ *      'pass' => 123
+ * ]
+ *
+ * wap($array, 'foo.bar')           // `baz`,       subarray foo contains key bar
+ * wap($array, 'bar', 'nothing')    // `nothing`,   path 'bar' not exists
+ * wap($array, 'pass', 321)         // `123`,       path exists
+ *
+ * @param $array array
+ * @param $path string comma-separated array path
+ * @param null $default fallback value
+ * @return mixed
+ */
+if (!function_exists('wap')) {
+    function wap($array, $path, $default = null)
+    {
+        $pathway = explode('.', $path);
+        $value = $default;
+        foreach ($pathway as $chain) {
+            if (isset($array[$chain]))
+                $value = $array[$chain];
+            else break;
+        }
+        return $value;
+    }
+}
