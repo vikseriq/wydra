@@ -14,6 +14,11 @@ class Wydra
     // shortcode render instances
     static $_instance_stack = [];
 
+    // html shortcode variants
+    static $HTML_TAGS = ['pre', 'tag', 'div', 'span', 'p'];
+    // maximum depth of html shortcodes nesting
+    static $HTML_TAGS_DEPTH = 5;
+
     /**
      * Scan directories and define shortcodes based on template names
      */
@@ -26,7 +31,20 @@ class Wydra
         }
 
         // register data-related shortcodes
+        add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-define', ['Wydra', 'define_data']);
         add_shortcode(Wydra\SHORTCODE_PREFIX . '-define', ['Wydra', 'define_data']);
+
+        // register html-like shortcodes
+        foreach (self::$HTML_TAGS as $tag) {
+            add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-' . $tag, ['Wydra', 'do_tag']);
+            add_shortcode(Wydra\SHORTCODE_PREFIX . '-' . $tag, ['Wydra', 'do_tag']);
+            // register depth, like wydra-div-0, w-tag-3
+            $depth = self::$HTML_TAGS_DEPTH;
+            do {
+                add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-' . $tag . '-' . $depth, ['Wydra', 'do_tag']);
+                add_shortcode(Wydra\SHORTCODE_PREFIX . '-' . $tag . '-' . $depth, ['Wydra', 'do_tag']);
+            } while ($depth--);
+        }
     }
 
     /**
@@ -39,18 +57,18 @@ class Wydra
         if (!self::$_templates) {
 
             $templates = [];
-            $prefix = \Wydra\SHORTCODE_PREFIX;
             $paths = [
-                'plugin' => \Wydra\VIEW_PATH,
-                'template' => TEMPLATEPATH . Wydra\THEME_PATH
+                'theme' => TEMPLATEPATH . Wydra\THEME_PATH,
+                'templates' => Wydra\TEMPLATES_PATH
             ];
 
             foreach ($paths as $path) {
-                if (!file_exists($path))
+                if (!is_dir($path))
                     continue;
                 $directory = scandir($path);
                 foreach ($directory as $file) {
                     if (preg_match('/^(.*)\.php$/', $file, $match)) {
+                        $prefix = \Wydra\SHORTCODE_PREFIX_CORE;
                         // direct shortcode, like wydra-list
                         $code = "{$prefix}-{$match[1]}";
                         $templates[$code] = array(
@@ -58,8 +76,10 @@ class Wydra
                             'name' => $match[1],
                             'file' => $path . $file,
                         );
-                        // additional shortcode, like wydra-list-view
-                        $code = "{$prefix}-{$match[1]}-view";
+
+                        // alternative shorten shortcode, like w-list
+                        $prefix = \Wydra\SHORTCODE_PREFIX;
+                        $code = "{$prefix}-{$match[1]}";
                         $templates[$code] = array(
                             'code' => $code,
                             'name' => $match[1],
@@ -78,13 +98,30 @@ class Wydra
      * Returns template file path based on shortcode name
      *
      * @param $shortcode
-     * @return null
+     * @return string|null
      */
     static function template_file($shortcode)
     {
         if (!isset(self::$_templates[$shortcode]))
             return null;
         return self::$_templates[$shortcode]['file'];
+    }
+
+    /**
+     * Returns allowed tag name based on shortcode name
+     *
+     * @param $shortcode
+     * @return string|null
+     */
+    static function tag_name($shortcode)
+    {
+        foreach (self::$HTML_TAGS as $tag) {
+            if (preg_match('/^(' . \Wydra\SHORTCODE_PREFIX_CORE . '|' . \Wydra\SHORTCODE_PREFIX . ')-'
+                . $tag . '(-\d)?$/', $shortcode)) {
+                return $tag;
+            }
+        }
+        return null;
     }
 
     /**
@@ -118,6 +155,27 @@ class Wydra
     }
 
     /**
+     * Performing common tag processing
+     *
+     * @param $attrs
+     * @param $content
+     * @param $shortcode
+     * @return false|string
+     */
+    static function do_tag($attrs, $content, $shortcode)
+    {
+        $tag = self::tag_name($shortcode);
+        if (!$tag)
+            return '';
+
+        self::$_instance_stack[] = new WydraInstance($tag, $attrs, $content);
+        $content = self::latest()->render();
+        array_pop(self::$_instance_stack);
+
+        return $content;
+    }
+
+    /**
      * Return most recent shortcode render instance from stack
      *
      * @return WydraInstance
@@ -125,6 +183,25 @@ class Wydra
     static function latest()
     {
         return self::$_instance_stack[count(self::$_instance_stack) - 1];
+    }
+
+    /**
+     * Extracting inner content from pre tags.
+     * Returns original content if no pre pair found.
+     *
+     * @param $content
+     * @return string
+     */
+    static function unwrap($content)
+    {
+        $start = strpos($content, '<pre>') + 5;
+        $end = strrpos($content, '</pre>');
+        if ($start < $end) {
+            // extract pre-wrapped
+            return substr($content, $start, $end - $start);
+        }
+        // no pre found
+        return $content;
     }
 
     /**
@@ -137,13 +214,10 @@ class Wydra
     static function parse_yaml($raw_content)
     {
         $yaml = [];
-        $start = strpos($raw_content, '<pre>') + 5;
-        $end = strrpos($raw_content, '</pre>');
-        if ($start < $end) {
-            // extract pre-wrapped
-            $content = substr($raw_content, $start, $end - $start);
-        } else {
-            // decode WP entities
+        $content = self::unwrap($raw_content);
+
+        if (strlen($content) === strlen($raw_content)) {
+            // decode WP entities if no pre-wrap was found
             $content = html_entity_decode(
                 str_replace(['&#8212;', '<br />'], ['-', ''], ($raw_content))
             );
@@ -163,7 +237,7 @@ class Wydra
             }
         }
 
-        include_once \Wydra\PLUGIN_FILE . '/Dipper.php';
+        include_once __DIR__ . '/Dipper.php';
         try {
             $yaml = \secondparty\Dipper\Dipper::parse($content);
             if (is_array($yaml) && !empty($yaml[$list_wrap])) {
@@ -212,6 +286,12 @@ class Wydra
         return self::$DEFINE_DUMP_INSTANCE ? 'wydra-instance-' . $hash . ' ' : '';
     }
 
+    /**
+     * Load and parse YAML data from external source
+     *
+     * @param $attrs
+     * @return mixed|null
+     */
     static function fetch_yaml($attrs)
     {
         $attrs = shortcode_atts([
@@ -245,33 +325,58 @@ class Wydra
 }
 
 /**
- * A render instance available in every wydra shortcode
+ * A render instance available in every wydra shortcode.
+ * Used to transform shortcode and it's data to html code.
  *
  * Class WydraInstance
  */
 class WydraInstance
 {
-
-    var $template_file;
+    var $tag_value;
     var $result = '';
     var $attrs = [];
     var $content = '';
 
-    function __construct($template_file, $attrs, $content)
+    /**
+     * WydraInstance constructor.
+     *
+     * @param $tag_value    string      Path to template file or html tag name
+     * @param $attrs        string[]    Shortcode attributes
+     * @param $content      string      Inner content
+     */
+    function __construct($tag_value, $attrs, $content)
     {
         $this->attrs = $attrs;
         $this->content = $content;
-        $this->template_file = $template_file;
+        $this->tag_value = $tag_value;
     }
 
+    /**
+     * Generating result HTML.
+     *
+     * @return string
+     */
     function render()
     {
-        ob_start();
-        include $this->template_file;
-        $this->result = ob_get_clean();
+        if (is_file($this->tag_value)) {
+            // render template file
+            ob_start();
+            include $this->tag_value;
+            $this->result = ob_get_clean();
+        } else {
+            // render as tag
+            $this->result = $this->render_tag();
+        }
         return $this->result;
     }
 
+    /**
+     * Get the named attribute value.
+     *
+     * @param $code
+     * @param null $default fallback value
+     * @return string|null
+     */
     function attr($code, $default = null)
     {
         if (isset($this->attrs[$code]))
@@ -279,9 +384,51 @@ class WydraInstance
         return $default;
     }
 
+    /**
+     * Return processed inner content.
+     *
+     * @return string
+     */
     function content()
     {
         return do_shortcode($this->content);
+    }
+
+    /**
+     * Rendering shortcode as plain HTML tag
+     *
+     * @return string
+     */
+    protected function render_tag()
+    {
+        $tag = $this->tag_value;
+
+        // special case for w-pre: just unwrapping content and that's all
+        if ('pre' === $tag) {
+            $this->content = Wydra::unwrap($this->content);
+            return $this->content();
+        }
+
+        // another case: w-tag, process first argument as tag name
+        if ('tag' === $tag) {
+            if (empty($this->attrs))
+                return $this->content();
+            $tag = $this->attrs[0];
+            unset($this->attrs[0]);
+        }
+
+        // cast all attributes as HTML element attributes
+        $attributes = [];
+        if (!empty($this->attrs)) {
+            foreach ($this->attrs as $k => $v) {
+                $attributes[] = esc_attr($k) . '="' . esc_attr($v) . '"';
+            }
+        }
+
+        // format data as a tag
+        return '<' . $tag
+            . ($attributes ? ' ' . implode(' ', $attributes) : '')
+            . '>' . $this->content() . '</' . $tag . '>';
     }
 
 }
