@@ -208,21 +208,43 @@ class Wydra
     }
 
     /**
-     * Processing raw post content and extracts YAML data.
+     * Just parse YAML from string content
      * The Dipper parser used to process.
      *
      * @param $raw_content
-     * @return array
+     * @return array|null
      */
     static function parse_yaml($raw_content)
     {
-        $yaml = [];
-        $content = self::unwrap($raw_content);
+        $yaml = null;
+        include_once __DIR__ . '/Dipper.php';
+        try {
+            $yaml = \secondparty\Dipper\Dipper::parse($raw_content);
+        } catch (Exception $e) {
+            if (WP_DEBUG) {
+                echo 'Wydra debug: YAML parse error /EOF' . PHP_EOL;
+                echo $raw_content . PHP_EOL . '/EOF;' . PHP_EOL;
+                echo $e->getMessage();
+            }
+        }
+        return $yaml;
+    }
 
-        if (strlen($content) === strlen($raw_content)) {
+    /**
+     * Processing raw post content and extracts YAML data.
+     *
+     * @param $post_content
+     * @return array
+     */
+    static function parse_content_yaml($post_content)
+    {
+        $yaml = [];
+        $content = self::unwrap($post_content);
+
+        if (strlen($content) === strlen($post_content)) {
             // decode WP entities if no pre-wrap was found
             $content = html_entity_decode(
-                str_replace(['&#8212;', '<br />'], ['-', ''], ($raw_content))
+                str_replace(['&#8212;', '<br />'], ['-', ''], ($post_content))
             );
         }
 
@@ -240,18 +262,9 @@ class Wydra
             }
         }
 
-        include_once __DIR__ . '/Dipper.php';
-        try {
-            $yaml = \secondparty\Dipper\Dipper::parse($content);
-            if (is_array($yaml) && !empty($yaml[$list_wrap])) {
-                $yaml = $yaml[$list_wrap];
-            }
-        } catch (Exception $e) {
-            if (WP_DEBUG) {
-                echo 'Wydra debug: YAML parse error /EOF' . PHP_EOL;
-                echo $content . PHP_EOL . '/EOF;' . PHP_EOL;
-                echo $e->getMessage();
-            }
+        $yaml = self::parse_content_yaml($content);
+        if (is_array($yaml) && !empty($yaml[$list_wrap])) {
+            $yaml = $yaml[$list_wrap];
         }
 
         return $yaml;
@@ -283,7 +296,7 @@ class Wydra
         self::$_data[$code] = [
             'name' => $attrs['name'],
             'hash' => $hash,
-            'data' => self::parse_yaml($content)
+            'data' => self::parse_content_yaml($content)
         ];
 
         return self::$DEFINE_DUMP_INSTANCE ? 'wydra-instance-' . $hash . ' ' : '';
@@ -426,8 +439,8 @@ class WydraInstance
         if (isset($this->attrs[$code]))
             return $this->attrs[$code];
         // check for flag-like attribute
-        foreach ($this->attrs as $index => $value){
-            if (is_numeric($index) && $value === $code){
+        foreach ($this->attrs as $index => $value) {
+            if (is_numeric($index) && $value === $code) {
                 return true;
             }
         }

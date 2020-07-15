@@ -6,7 +6,7 @@
  * GitHub Plugin URI: https://github.com/vikseriq/wydra
  * Author: vikseriq
  * Author URI: https://vikseriq.xyz/
- * Version: 0.2.0
+ * Version: 0.3.0
  * License: MIT
  * License URI: https://tldrlegal.com/license/mit-license
  */
@@ -64,12 +64,21 @@ function wydra_data($name)
 }
 
 /**
- * Return PHP array of YAML content
+ * Return PHP array of YAML content of current container
  * @return array
  */
 function wydra_yaml()
 {
-    return Wydra::parse_yaml(Wydra::latest()->content());
+    return Wydra::parse_content_yaml(Wydra::latest()->content());
+}
+
+/**
+ * Parse raw YAML content
+ * @param $content
+ * @return array|null
+ */
+function wydra_parse_yaml($content){
+    return Wydra::parse_yaml($content);
 }
 
 /**
