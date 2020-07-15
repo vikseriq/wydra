@@ -2,8 +2,11 @@
 
 class Wydra
 {
-    // shortcode-to-template map
-    static $_templates = null;
+    // registered shortcodes list with handlers
+    static $_shortcodes = [];
+
+    // shortcode alias map
+    static $_shortcode_alias = [];
 
     // controls either wydra-define returns data or not
     static $DEFINE_DUMP_INSTANCE = false;
@@ -24,30 +27,65 @@ class Wydra
      */
     static function init()
     {
-        // register shortcodes from template files
-        $available_shortcodes = self::scan_templates();
-        foreach ($available_shortcodes as $shortcode) {
-            add_shortcode($shortcode['code'], ['Wydra', 'do_shortcode']);
+        // define html-like shortcodes
+        foreach (self::$HTML_TAGS as $tag) {
+            self::$_shortcodes[$tag] = [
+                'handler' => ['Wydra', 'do_tag'],
+                'depth' => self::$HTML_TAGS_DEPTH,
+            ];
         }
 
-        // register data-related shortcodes
-        add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . 'define', ['Wydra', 'define_data']);
-        add_shortcode(Wydra\SHORTCODE_PREFIX . 'define', ['Wydra', 'define_data']);
+        // define data-related shortcodes
+        self::$_shortcodes['define'] = [
+            'handler' => ['Wydra', 'define_data'],
+        ];
 
-        // register html-like shortcodes
-        foreach (self::$HTML_TAGS as $tag) {
-            add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . $tag, ['Wydra', 'do_tag']);
-            add_shortcode(Wydra\SHORTCODE_PREFIX . $tag, ['Wydra', 'do_tag']);
-            // register depth, like wydra-div-0, w-tag-3
-            $depth = self::$HTML_TAGS_DEPTH;
-            do {
-                add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . $tag . '-' . $depth, ['Wydra', 'do_tag']);
-                add_shortcode(Wydra\SHORTCODE_PREFIX . $tag . '-' . $depth, ['Wydra', 'do_tag']);
-            } while ($depth--);
+        // define shortcodes from template files
+        $available_shortcodes = self::scan_templates();
+        foreach ($available_shortcodes as $shortcode) {
+            self::$_shortcodes[$shortcode['name']] = [
+                'handler' => ['Wydra', 'do_shortcode'],
+                'template' => $shortcode['file'],
+            ];
+        }
+
+        $prefix_list = [
+            Wydra\SHORTCODE_PREFIX_CORE,
+            Wydra\SHORTCODE_PREFIX,
+        ];
+        // register shortcodes and aliases
+        foreach (self::$_shortcodes as $code => $params) {
+            foreach ($prefix_list as $prefix) {
+                $shortcode_name = $prefix . $code;
+                self::$_shortcode_alias[$shortcode_name] = $code;
+                add_shortcode($shortcode_name, $params['handler']);
+            }
+
+            if (!empty($params['depth'])) {
+                $depth = min(max((int)$params['depth'], 1), self::$HTML_TAGS_DEPTH);
+                // register depth suffixes, like wydra-div-0, w-tag-3
+                for ($i = 0; $i <= $depth; $i++) {
+                    foreach ($prefix_list as $prefix) {
+                        $shortcode_name = $prefix . $code . '-' . $i;
+                        self::$_shortcode_alias[$shortcode_name] = $code;
+                        add_shortcode($shortcode_name, $params['handler']);
+                    }
+                };
+            }
         }
 
         // register post type
         self::register_yaml_post_type();
+        add_action('admin_menu', function () {
+            // add management page with list of registered wydra shortcodes
+            add_submenu_page('tools.php',
+                __('Wydra shortcodes', 'wydra'),
+                __('Available shortcodes', 'wydra'),
+                'edit_posts',
+                'wydra_shortcodes',
+                'wydra_wpadmin_shortcodes'
+            );
+        });
     }
 
     /**
@@ -57,48 +95,31 @@ class Wydra
      */
     static function scan_templates()
     {
-        if (!self::$_templates) {
+        $templates = [];
+        $paths = [
+            'theme' => TEMPLATEPATH . Wydra\THEME_PATH,
+            'templates' => Wydra\TEMPLATES_PATH
+        ];
 
-            $templates = [];
-            $paths = [
-                'theme' => TEMPLATEPATH . Wydra\THEME_PATH,
-                'templates' => Wydra\TEMPLATES_PATH
-            ];
-
-            foreach ($paths as $path) {
-                if (!is_dir($path))
+        foreach ($paths as $path) {
+            if (!is_dir($path))
+                continue;
+            $directory = scandir($path);
+            foreach ($directory as $file) {
+                if (in_array(substr($file, 0, 1), ['.', '!', '~', '-'])) {
+                    // exclude files with prefix
                     continue;
-                $directory = scandir($path);
-                foreach ($directory as $file) {
-                    if (in_array(substr($file, 0, 1), ['.', '!', '~', '-'])) {
-                        // exclude files with prefix
-                        continue;
-                    }
-                    if (preg_match('/^(.*)\.php$/', $file, $match)) {
-                        $prefix = \Wydra\SHORTCODE_PREFIX_CORE;
-                        // direct shortcode, like wydra-list
-                        $code = "{$prefix}{$match[1]}";
-                        $templates[$code] = array(
-                            'code' => $code,
-                            'name' => $match[1],
-                            'file' => $path . $file,
-                        );
-
-                        // alternative shorten shortcode, like w-list
-                        $prefix = \Wydra\SHORTCODE_PREFIX;
-                        $code = "{$prefix}{$match[1]}";
-                        $templates[$code] = array(
-                            'code' => $code,
-                            'name' => $match[1],
-                            'file' => $path . $file,
-                        );
-                    }
+                }
+                if (preg_match('/^(.*)\.php$/', $file, $match)) {
+                    $code = $match[1];
+                    $templates[$code] = array(
+                        'name' => $code,
+                        'file' => $path . $file,
+                    );
                 }
             }
-            self::$_templates = $templates;
         }
-
-        return self::$_templates;
+        return $templates;
     }
 
     /**
@@ -109,9 +130,9 @@ class Wydra
      */
     static function template_file($shortcode)
     {
-        if (!isset(self::$_templates[$shortcode]))
+        if (!isset(self::$_shortcode_alias[$shortcode]))
             return null;
-        return self::$_templates[$shortcode]['file'];
+        return self::$_shortcodes[self::$_shortcode_alias[$shortcode]]['template'];
     }
 
     /**
@@ -440,9 +461,14 @@ class WydraInstance
      */
     function attr($code, $default = null)
     {
+        // no attributes at all
+        if (empty($this->attrs)) {
+            return $default;
+        }
+        // code attribute
         if (isset($this->attrs[$code]))
             return $this->attrs[$code];
-        // check for flag-like attribute
+        // flag-like attribute
         foreach ($this->attrs as $index => $value) {
             if (is_numeric($index) && $value === $code) {
                 return true;

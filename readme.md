@@ -33,6 +33,10 @@ This plugin helps to save integration/further support time by utilizing followin
 
 ## Usage
 
+See all Wydra registered shortcodes and their templates at 
+`WP Admin > Tools > Wydra shortcodes`
+
+
 ### Shortcode prefix
 
 By default, plugin registers shortcodes in two variants:
@@ -44,9 +48,8 @@ constant placed in `wp-config.php` or theme's `functions.php`:
 define('Wydra\SHORTCODE_PREFIX', 'my-custom-prefix-');
 ```
 
-In the following examples we assume to use a `w-`-prefix,
-(like `[w-define]`), but keep in mind that every shortcode also available 
-in full form (`[wydra-define]`) and shorthand form (`my-custom-prefix-define`).
+In the following examples we assume to use a `w-`-prefix like `[w-define]`, 
+but keep in mind that every shortcode also available in full form like `[wydra-define]`.
 
 
 ### Template-based shortcodes
