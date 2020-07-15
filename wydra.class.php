@@ -31,18 +31,18 @@ class Wydra
         }
 
         // register data-related shortcodes
-        add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-define', ['Wydra', 'define_data']);
-        add_shortcode(Wydra\SHORTCODE_PREFIX . '-define', ['Wydra', 'define_data']);
+        add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . 'define', ['Wydra', 'define_data']);
+        add_shortcode(Wydra\SHORTCODE_PREFIX . 'define', ['Wydra', 'define_data']);
 
         // register html-like shortcodes
         foreach (self::$HTML_TAGS as $tag) {
-            add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-' . $tag, ['Wydra', 'do_tag']);
-            add_shortcode(Wydra\SHORTCODE_PREFIX . '-' . $tag, ['Wydra', 'do_tag']);
+            add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . $tag, ['Wydra', 'do_tag']);
+            add_shortcode(Wydra\SHORTCODE_PREFIX . $tag, ['Wydra', 'do_tag']);
             // register depth, like wydra-div-0, w-tag-3
             $depth = self::$HTML_TAGS_DEPTH;
             do {
-                add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . '-' . $tag . '-' . $depth, ['Wydra', 'do_tag']);
-                add_shortcode(Wydra\SHORTCODE_PREFIX . '-' . $tag . '-' . $depth, ['Wydra', 'do_tag']);
+                add_shortcode(Wydra\SHORTCODE_PREFIX_CORE . $tag . '-' . $depth, ['Wydra', 'do_tag']);
+                add_shortcode(Wydra\SHORTCODE_PREFIX . $tag . '-' . $depth, ['Wydra', 'do_tag']);
             } while ($depth--);
         }
 
@@ -70,10 +70,14 @@ class Wydra
                     continue;
                 $directory = scandir($path);
                 foreach ($directory as $file) {
+                    if (in_array(substr($file, 0, 1), ['.', '!', '~', '-'])) {
+                        // exclude files with prefix
+                        continue;
+                    }
                     if (preg_match('/^(.*)\.php$/', $file, $match)) {
                         $prefix = \Wydra\SHORTCODE_PREFIX_CORE;
                         // direct shortcode, like wydra-list
-                        $code = "{$prefix}-{$match[1]}";
+                        $code = "{$prefix}{$match[1]}";
                         $templates[$code] = array(
                             'code' => $code,
                             'name' => $match[1],
@@ -82,7 +86,7 @@ class Wydra
 
                         // alternative shorten shortcode, like w-list
                         $prefix = \Wydra\SHORTCODE_PREFIX;
-                        $code = "{$prefix}-{$match[1]}";
+                        $code = "{$prefix}{$match[1]}";
                         $templates[$code] = array(
                             'code' => $code,
                             'name' => $match[1],
@@ -119,7 +123,7 @@ class Wydra
     static function tag_name($shortcode)
     {
         foreach (self::$HTML_TAGS as $tag) {
-            if (preg_match('/^(' . \Wydra\SHORTCODE_PREFIX_CORE . '|' . \Wydra\SHORTCODE_PREFIX . ')-'
+            if (preg_match('/^(' . \Wydra\SHORTCODE_PREFIX_CORE . '|' . \Wydra\SHORTCODE_PREFIX . ')'
                 . $tag . '(-\d)?$/', $shortcode)) {
                 return $tag;
             }

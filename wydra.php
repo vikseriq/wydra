@@ -11,11 +11,16 @@
  * License URI: https://tldrlegal.com/license/mit-license
  */
 
-define('Wydra\SHORTCODE_PREFIX_CORE', 'wydra');
+if (defined('Wydra\SHORTCODE_PREFIX_CORE') || !function_exists('add_action')) {
+    // noop if already loaded or in direct call
+    return;
+}
+
+define('Wydra\SHORTCODE_PREFIX_CORE', 'wydra-');
 
 if (!defined('Wydra\SHORTCODE_PREFIX')) {
     // shorthand prefix
-    define('Wydra\SHORTCODE_PREFIX', 'w');
+    define('Wydra\SHORTCODE_PREFIX', 'w-');
 }
 if (!defined('Wydra\THEME_PATH')) {
     // In-theme templates subfolder name
@@ -24,6 +29,10 @@ if (!defined('Wydra\THEME_PATH')) {
 if (!defined('Wydra\TEMPLATES_PATH')) {
     // Path to theme-agnostic templates
     define('Wydra\TEMPLATES_PATH', __DIR__ . '/templates/');
+}
+if (!defined('Wydra\YAML_POST_TYPE')) {
+    // In-theme templates subfolder name
+    define('Wydra\YAML_POST_TYPE', 'wydra_yaml');
 }
 
 add_action('after_setup_theme', 'wydra_boot_plugin');
@@ -122,9 +131,10 @@ if (!function_exists('wap')) {
      * @param $array
      * @param $path
      * @param null $default
+     * @return mixed
      */
     function wap($array, $path, $default = null)
     {
-        call_user_func('wydra_array_path', func_get_args());
+        return wydra_array_path($array, $path, $default);
     }
 }
