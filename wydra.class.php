@@ -80,7 +80,7 @@ class Wydra
             // add management page with list of registered wydra shortcodes
             add_submenu_page('tools.php',
                 __('Wydra shortcodes', 'wydra'),
-                __('Available shortcodes', 'wydra'),
+                __('Wydra shortcodes', 'wydra'),
                 'edit_posts',
                 'wydra_shortcodes',
                 'wydra_wpadmin_shortcodes'
@@ -404,6 +404,162 @@ class Wydra
             return $value;
         });
     }
+}
+
+
+function wydra_wpadmin_shortcodes()
+{
+    if (!class_exists('WP_List_Table')) {
+        require_once(ABSPATH . 'wp-admin/includes/class-wp-list-table.php');
+    }
+
+    class ShortcodesList extends WP_List_Table
+    {
+
+        /**
+         * Extract `@var` definitions from file
+         *
+         * @param $filename
+         * @return array
+         */
+        function extract_template_definition($filename)
+        {
+            // TODO: implement
+            return [];
+        }
+
+        /**
+         * Prepare shortcodes
+         */
+        public function prepare_items()
+        {
+            $items = [];
+            foreach (Wydra::$_shortcodes as $code => $props) {
+                $aliases = [];
+                // lookup aliases
+                foreach (Wydra::$_shortcode_alias as $alias => $_code) {
+                    if ($code === $_code) {
+                        $aliases[] = $alias;
+                    }
+                }
+                // fill row
+                $item = [
+                    'code' => $code,
+                    'aliases' => $aliases,
+                    'handler' => implode('\\', $props['handler']),
+                    'source' => isset($props['template']) ? $props['template'] : null,
+                    'attributes' => null,
+                ];
+
+                if ($item['source']) {
+                    // get attributes
+                    $item['attributes'] = $this->extract_template_definition($item['source']);
+                }
+
+                $items[] = $item;
+            }
+
+            // sorting
+            usort($items, function ($a, $b) {
+                // move built-in templates down
+                if (empty($a['source']) && !empty($b['source'])) {
+                    return 1;
+                } else if (!empty($a['source']) && empty($b['source'])) {
+                    return -1;
+                }
+                // sort by code asc
+                return strcmp($a['code'], $b['code']);
+            });
+
+            // setup wp table
+            $n = count($items);
+            $this->_column_headers = [
+                $this->get_columns(),
+                [], // hidden columns
+                $this->get_sortable_columns(),
+                $this->get_primary_column_name(),
+            ];
+            $this->set_pagination_args([
+                'total_items' => $n,
+                'per_page' => $n,
+            ]);
+            $this->items = $items;
+        }
+
+        /**
+         * Table columns
+         * @return array
+         */
+        public function get_columns()
+        {
+            return [
+                'code' => 'Base code',
+                'aliases' => 'Shortcodes',
+                'attributes' => 'Available attributes',
+                'source' => 'Template file',
+            ];
+        }
+
+        /**
+         * Table cells renderer
+         *
+         * @param object $item
+         * @param string $column_name
+         * @return string|string[]|void
+         */
+        public function column_default($item, $column_name)
+        {
+            switch ($column_name) {
+                case 'aliases':
+                    return implode(' ', array_map(function ($i) {
+                        return '<code style="white-space:nowrap;">' . $i . '</code> ';
+                    }, $item[$column_name]));
+                case 'attributes':
+                    return '<i>none</i>';
+                case 'source':
+                    $v = $item[$column_name];
+                    if (empty($v)) {
+                        return '<i>built-in</i>';
+                    }
+                    $file_path = str_replace(ABSPATH, '', $v);
+                    if (preg_match('|^wp-content/([^/]+)/([^/]+)/(.*)$|', $file_path, $matches)) {
+                        $link = '';
+                        // build a link to editor screen
+                        switch ($matches[1]) {
+                            case 'themes':
+                                $link = admin_url(sprintf('theme-editor.php?theme=%1$s&file=%2$s',
+                                    $matches[2], $matches[3]
+                                ));
+                                break;
+                            case'plugins':
+                                $link = admin_url(sprintf('plugin-editor.php??plugin=%1$s/%1$s.php&file=%1$s/%2$s',
+                                    $matches[2], $matches[3]
+                                ));
+                                break;
+                        }
+                        if ($link) {
+                            return sprintf('<a target="_blank" href="%s">%s</a>',
+                                $link, $file_path
+                            );
+                        }
+                    }
+                    return $file_path;
+                default:
+                    return $item[$column_name];
+                    break;
+            }
+        }
+    }
+
+    // construct and display
+    $wp_list_table = new ShortcodesList();
+    $wp_list_table->prepare_items();
+
+    echo '<div class="wrap">';
+    echo '<h1 class="wp-heading-inline">' . __('Available Wydra shortcodes', 'wydra') . '</h1>';
+    echo '<hr class="wp-header-end" />';
+    $wp_list_table->display();
+    echo '</div>';
 }
 
 /**

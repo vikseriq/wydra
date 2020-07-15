@@ -6,7 +6,7 @@
  * GitHub Plugin URI: https://github.com/vikseriq/wydra
  * Author: vikseriq
  * Author URI: https://vikseriq.xyz/
- * Version: 0.3.0
+ * Version: 0.4.0
  * License: MIT
  * License URI: https://tldrlegal.com/license/mit-license
  */
