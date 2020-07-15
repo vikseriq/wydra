@@ -45,6 +45,9 @@ class Wydra
                 add_shortcode(Wydra\SHORTCODE_PREFIX . '-' . $tag . '-' . $depth, ['Wydra', 'do_tag']);
             } while ($depth--);
         }
+
+        // register post type
+        self::register_yaml_post_type();
     }
 
     /**
@@ -322,6 +325,47 @@ class Wydra
         }
         return null;
     }
+
+    /**
+     * Register post type for yaml-only content
+     */
+    static function register_yaml_post_type()
+    {
+        $args = array(
+            'label' => __('YAML'),
+            'description' => __('YAML data'),
+            'labels' => array(
+                'name' => _x('YAML', 'Post Type General Name'),
+                'singular_name' => _x('YAML', 'Post Type Singular Name'),
+            ),
+            'supports' => array('title', 'editor', 'revisions'),
+            'hierarchical' => false,
+            'public' => true,
+            'show_ui' => true,
+            'show_in_menu' => true,
+            'menu_position' => 28,
+            'menu_icon' => 'dashicons-media-code',
+            'show_in_admin_bar' => true,
+            'show_in_nav_menus' => false,
+            'can_export' => false,
+            'has_archive' => false,
+            'exclude_from_search' => true,
+            'publicly_queryable' => false,
+            'rewrite' => false,
+            'capability_type' => 'page',
+            'show_in_rest' => false,
+        );
+        register_post_type(Wydra\YAML_POST_TYPE, $args);
+
+        // disable wysiwyg
+        add_filter('user_can_richedit', function ($value) {
+            global $post;
+            if (get_post_type($post) === Wydra\YAML_POST_TYPE) {
+                $value = false;
+            }
+            return $value;
+        });
+    }
 }
 
 /**
@@ -381,6 +425,12 @@ class WydraInstance
     {
         if (isset($this->attrs[$code]))
             return $this->attrs[$code];
+        // check for flag-like attribute
+        foreach ($this->attrs as $index => $value){
+            if (is_numeric($index) && $value === $code){
+                return true;
+            }
+        }
         return $default;
     }
 
